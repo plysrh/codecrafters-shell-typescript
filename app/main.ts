@@ -15,7 +15,11 @@ function repl() {
       process.exit(exitCode);
     }
     
-    console.log(`${answer}: command not found`);
+    if (command === 'echo') {
+      console.log(parts.slice(1).join(' '));
+    } else {
+      console.log(`${answer}: command not found`);
+    }
     repl();
   });
 }

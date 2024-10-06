@@ -1,6 +1,7 @@
-import { createInterface } from "readline";
-import * as fs from "fs";
-import * as path from "path";
+import { createInterface } from "node:readline";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 
 const rl = createInterface({
   input: process.stdin,
@@ -25,6 +26,7 @@ function repl() {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+
         let found = false;
         
         for (const dir of pathDirs) {
@@ -48,7 +50,28 @@ function repl() {
         }
       }
     } else {
-      console.log(`${answer}: command not found`);
+      const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+      let found = false;
+      
+      for (const dir of pathDirs) {
+        const fullPath = path.join(dir, command);
+
+        try {
+          const stats = fs.statSync(fullPath);
+
+          if (stats.isFile() && (stats.mode & 0o111)) {
+            spawnSync(fullPath, parts.slice(1), { stdio: 'inherit', argv0: command });
+
+            found = true;
+
+            break;
+          }
+        } catch {}
+      }
+      
+      if (!found) {
+        console.log(`${answer}: command not found`);
+      }
     }
     repl();
   });

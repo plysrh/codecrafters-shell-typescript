@@ -19,10 +19,12 @@ function repl() {
       process.exit(exitCode);
     } else if (command === 'echo') {
       console.log(parts.slice(1).join(' '));
+    } else if (command === 'pwd') {
+      console.log(process.cwd());
     } else if (command === 'type') {
       const targetCommand = parts[1];
 
-      if (['echo', 'exit', 'type'].includes(targetCommand)) {
+      if (['echo', 'exit', 'type', 'pwd'].includes(targetCommand)) {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];

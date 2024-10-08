@@ -22,12 +22,16 @@ function repl() {
     } else if (command === 'pwd') {
       console.log(process.cwd());
     } else if (command === 'cd') {
-      const targetDir = parts[1];
+      let targetDir = parts[1];
+      
+      if (targetDir === '~') {
+        targetDir = process.env.HOME || '';
+      }
 
       try {
         process.chdir(targetDir);
       } catch {
-        console.log(`cd: ${targetDir}: No such file or directory`);
+        console.log(`cd: ${parts[1]}: No such file or directory`);
       }
     } else if (command === 'type') {
       const targetCommand = parts[1];
@@ -83,6 +87,7 @@ function repl() {
         console.log(`${answer}: command not found`);
       }
     }
+
     repl();
   });
 }

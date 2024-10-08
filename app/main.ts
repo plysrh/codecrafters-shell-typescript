@@ -9,7 +9,7 @@ const rl = createInterface({
 });
 
 function repl() {
-  rl.question("$ ", (answer) => {
+  rl.question("$ ", answer => {
     const parts = answer.trim().split(' ');
     const command = parts[0];
     
@@ -21,10 +21,18 @@ function repl() {
       console.log(parts.slice(1).join(' '));
     } else if (command === 'pwd') {
       console.log(process.cwd());
+    } else if (command === 'cd') {
+      const targetDir = parts[1];
+
+      try {
+        process.chdir(targetDir);
+      } catch {
+        console.log(`cd: ${targetDir}: No such file or directory`);
+      }
     } else if (command === 'type') {
       const targetCommand = parts[1];
 
-      if (['echo', 'exit', 'type', 'pwd'].includes(targetCommand)) {
+      if (['echo', 'exit', 'type', 'pwd', 'cd'].includes(targetCommand)) {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];

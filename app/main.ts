@@ -8,24 +8,54 @@ const rl = createInterface({
   output: process.stdout,
 });
 
+function parseCommand(input: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    
+    if (char === "'" && !inQuotes) {
+      inQuotes = true;
+    } else if (char === "'" && inQuotes) {
+      inQuotes = false;
+    } else if (char === ' ' && !inQuotes) {
+      if (current) {
+        parts.push(current);
+
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+  
+  if (current) {
+    parts.push(current);
+  }
+  
+  return parts;
+}
+
 function repl() {
   rl.question("$ ", answer => {
-    const parts = answer.trim().split(' ');
+    const parts = parseCommand(answer.trim());
     const command = parts[0];
     
-    if (command === 'exit') {
+    if (command === "exit") {
       const exitCode = parts[1] ? parseInt(parts[1], 10) : 0;
 
       process.exit(exitCode);
-    } else if (command === 'echo') {
+    } else if (command === "echo") {
       console.log(parts.slice(1).join(' '));
-    } else if (command === 'pwd') {
+    } else if (command === "pwd") {
       console.log(process.cwd());
-    } else if (command === 'cd') {
+    } else if (command === "cd") {
       let targetDir = parts[1];
       
-      if (targetDir === '~') {
-        targetDir = process.env.HOME || '';
+      if (targetDir === "~") {
+        targetDir = process.env.HOME || "";
       }
 
       try {
@@ -33,10 +63,10 @@ function repl() {
       } catch {
         console.log(`cd: ${parts[1]}: No such file or directory`);
       }
-    } else if (command === 'type') {
+    } else if (command === "type") {
       const targetCommand = parts[1];
 
-      if (['echo', 'exit', 'type', 'pwd', 'cd'].includes(targetCommand)) {
+      if (["echo", "exit", "type", "pwd", "cd"].includes(targetCommand)) {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];
@@ -74,7 +104,7 @@ function repl() {
           const stats = fs.statSync(fullPath);
 
           if (stats.isFile() && (stats.mode & 0o111)) {
-            spawnSync(fullPath, parts.slice(1), { stdio: 'inherit', argv0: command });
+            spawnSync(fullPath, parts.slice(1), { stdio: "inherit", argv0: command });
 
             found = true;
 

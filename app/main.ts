@@ -11,19 +11,18 @@ const rl = createInterface({
 function parseCommand(input: string): string[] {
   const parts: string[] = [];
   let current = '';
-  let inQuotes = false;
+  let quoteChar = '';
   
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     
-    if (char === "'" && !inQuotes) {
-      inQuotes = true;
-    } else if (char === "'" && inQuotes) {
-      inQuotes = false;
-    } else if (char === ' ' && !inQuotes) {
+    if ((char === "'" || char === '"') && !quoteChar) {
+      quoteChar = char;
+    } else if (char === quoteChar) {
+      quoteChar = '';
+    } else if (char === ' ' && !quoteChar) {
       if (current) {
         parts.push(current);
-
         current = '';
       }
     } else {

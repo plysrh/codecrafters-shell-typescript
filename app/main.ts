@@ -10,23 +10,36 @@ const rl = createInterface({
 
 function parseCommand(input: string): string[] {
   const parts: string[] = [];
-  let current = '';
-  let quoteChar = '';
+  let current = "";
+  let quoteChar = "";
   
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     
-    if (char === '\\' && !quoteChar && i + 1 < input.length) {
-      current += input[i + 1];
-      i++; // Skip next character
+    if (char === '\\' && i + 1 < input.length) {
+      const nextChar = input[i + 1];
+
+      if (!quoteChar) {
+        // Outside quotes: escape any character
+        current += nextChar;
+        i++;
+      } else if (quoteChar === '"' && (nextChar === '"' || nextChar === '\\')) {
+        // Inside double quotes: only escape " and \
+        current += nextChar;
+        i++;
+      } else {
+        // Inside single quotes or unescapable char in double quotes: literal backslash
+        current += char;
+      }
     } else if ((char === "'" || char === '"') && !quoteChar) {
       quoteChar = char;
     } else if (char === quoteChar) {
-      quoteChar = '';
-    } else if (char === ' ' && !quoteChar) {
+      quoteChar = "";
+    } else if (char === " " && !quoteChar) {
       if (current) {
         parts.push(current);
-        current = '';
+
+        current = "";
       }
     } else {
       current += char;
@@ -50,7 +63,7 @@ function repl() {
 
       process.exit(exitCode);
     } else if (command === "echo") {
-      console.log(parts.slice(1).join(' '));
+      console.log(parts.slice(1).join(" "));
     } else if (command === "pwd") {
       console.log(process.cwd());
     } else if (command === "cd") {

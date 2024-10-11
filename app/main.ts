@@ -16,7 +16,10 @@ function parseCommand(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     
-    if ((char === "'" || char === '"') && !quoteChar) {
+    if (char === '\\' && !quoteChar && i + 1 < input.length) {
+      current += input[i + 1];
+      i++; // Skip next character
+    } else if ((char === "'" || char === '"') && !quoteChar) {
       quoteChar = char;
     } else if (char === quoteChar) {
       quoteChar = '';

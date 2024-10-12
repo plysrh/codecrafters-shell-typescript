@@ -56,14 +56,34 @@ function parseCommand(input: string): string[] {
 function repl() {
   rl.question("$ ", answer => {
     const parts = parseCommand(answer.trim());
-    const command = parts[0];
+    
+    // Check for output redirection
+    let redirectFile = '';
+    let cmdParts = parts;
+    
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === ">" || parts[i] === "1>") {
+        redirectFile = parts[i + 1];
+        cmdParts = parts.slice(0, i);
+
+        break;
+      }
+    }
+    
+    const command = cmdParts[0];
     
     if (command === "exit") {
       const exitCode = parts[1] ? parseInt(parts[1], 10) : 0;
 
       process.exit(exitCode);
     } else if (command === "echo") {
-      console.log(parts.slice(1).join(" "));
+      const output = cmdParts.slice(1).join(" ");
+
+      if (redirectFile) {
+        fs.writeFileSync(redirectFile, output + '\n');
+      } else {
+        console.log(output);
+      }
     } else if (command === "pwd") {
       console.log(process.cwd());
     } else if (command === "cd") {
@@ -85,7 +105,6 @@ function repl() {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];
-
         let found = false;
         
         for (const dir of pathDirs) {
@@ -119,7 +138,18 @@ function repl() {
           const stats = fs.statSync(fullPath);
 
           if (stats.isFile() && (stats.mode & 0o111)) {
-            spawnSync(fullPath, parts.slice(1), { stdio: "inherit", argv0: command });
+            if (redirectFile) {
+              const result = spawnSync(fullPath, cmdParts.slice(1), { 
+                argv0: command,
+                stdio: ["inherit", "pipe", "inherit"]
+              });
+
+              if (result.stdout) {
+                fs.writeFileSync(redirectFile, result.stdout);
+              }
+            } else {
+              spawnSync(fullPath, cmdParts.slice(1), { stdio: "inherit", argv0: command });
+            }
 
             found = true;
 

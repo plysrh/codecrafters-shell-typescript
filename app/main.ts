@@ -58,13 +58,18 @@ function repl() {
     const parts = parseCommand(answer.trim());
     
     // Check for output redirection
-    let redirectFile = '';
-    let stderrRedirectFile = '';
+    let redirectFile = "";
+    let appendFile = "";
+    let stderrRedirectFile = "";
     let cmdParts = parts;
     
     for (let i = 0; i < parts.length; i++) {
       if (parts[i] === ">" || parts[i] === "1>") {
         redirectFile = parts[i + 1];
+        cmdParts = parts.slice(0, i);
+        break;
+      } else if (parts[i] === ">>" || parts[i] === "1>>") {
+        appendFile = parts[i + 1];
         cmdParts = parts.slice(0, i);
         break;
       } else if (parts[i] === "2>") {
@@ -84,11 +89,13 @@ function repl() {
       const output = cmdParts.slice(1).join(" ");
 
       if (redirectFile) {
-        fs.writeFileSync(redirectFile, output + '\n');
+        fs.writeFileSync(redirectFile, `${output}\n`);
+      } else if (appendFile) {
+        fs.appendFileSync(appendFile, `${output}\n`);
       } else if (stderrRedirectFile) {
         // echo doesn't write to stderr, so output normally and create empty file
         console.log(output);
-        fs.writeFileSync(stderrRedirectFile, '');
+        fs.writeFileSync(stderrRedirectFile, "");
       } else {
         console.log(output);
       }
@@ -154,6 +161,15 @@ function repl() {
 
               if (result.stdout) {
                 fs.writeFileSync(redirectFile, result.stdout);
+              }
+            } else if (appendFile) {
+              const result = spawnSync(fullPath, cmdParts.slice(1), { 
+                argv0: command,
+                stdio: ["inherit", "pipe", "inherit"]
+              });
+
+              if (result.stdout) {
+                fs.appendFileSync(appendFile, result.stdout);
               }
             } else if (stderrRedirectFile) {
               const result = spawnSync(fullPath, cmdParts.slice(1), { 

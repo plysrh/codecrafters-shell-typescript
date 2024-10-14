@@ -61,20 +61,29 @@ function repl() {
     let redirectFile = "";
     let appendFile = "";
     let stderrRedirectFile = "";
+    let stderrAppendFile = "";
     let cmdParts = parts;
     
     for (let i = 0; i < parts.length; i++) {
       if (parts[i] === ">" || parts[i] === "1>") {
         redirectFile = parts[i + 1];
         cmdParts = parts.slice(0, i);
+
         break;
       } else if (parts[i] === ">>" || parts[i] === "1>>") {
         appendFile = parts[i + 1];
         cmdParts = parts.slice(0, i);
+
         break;
       } else if (parts[i] === "2>") {
         stderrRedirectFile = parts[i + 1];
         cmdParts = parts.slice(0, i);
+
+        break;
+      } else if (parts[i] === "2>>") {
+        stderrAppendFile = parts[i + 1];
+        cmdParts = parts.slice(0, i);
+
         break;
       }
     }
@@ -96,6 +105,13 @@ function repl() {
         // echo doesn't write to stderr, so output normally and create empty file
         console.log(output);
         fs.writeFileSync(stderrRedirectFile, "");
+      } else if (stderrAppendFile) {
+        // echo doesn't write to stderr, so output normally and create empty file if needed
+        console.log(output);
+
+        if (!fs.existsSync(stderrAppendFile)) {
+          fs.writeFileSync(stderrAppendFile, "");
+        }
       } else {
         console.log(output);
       }
@@ -179,6 +195,15 @@ function repl() {
 
               if (result.stderr) {
                 fs.writeFileSync(stderrRedirectFile, result.stderr);
+              }
+            } else if (stderrAppendFile) {
+              const result = spawnSync(fullPath, cmdParts.slice(1), { 
+                argv0: command,
+                stdio: ["inherit", "inherit", "pipe"]
+              });
+
+              if (result.stderr) {
+                fs.appendFileSync(stderrAppendFile, result.stderr);
               }
             } else {
               spawnSync(fullPath, cmdParts.slice(1), { stdio: "inherit", argv0: command });

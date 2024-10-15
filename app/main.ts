@@ -6,6 +6,12 @@ import { spawnSync } from "node:child_process";
 const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
+  completer: (line: string) => {
+    const builtins = ["echo ", "exit "];
+    const hits = builtins.filter(cmd => cmd.startsWith(line));
+
+    return [hits, line];
+  }
 });
 
 function parseCommand(input: string): string[] {
@@ -23,7 +29,7 @@ function parseCommand(input: string): string[] {
         // Outside quotes: escape any character
         current += nextChar;
         i++;
-      } else if (quoteChar === '"' && (nextChar === '"' || nextChar === '\\')) {
+      } else if (quoteChar === '"' && (nextChar === '"' || nextChar === "\\")) {
         // Inside double quotes: only escape " and \
         current += nextChar;
         i++;

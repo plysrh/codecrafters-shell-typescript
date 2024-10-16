@@ -15,6 +15,11 @@ const rl = createInterface({
       const builtins = ["echo ", "exit "];
       const hits = builtins.filter(cmd => cmd.startsWith(currentWord));
 
+      // Ring bell if no matches found
+      if (hits.length === 0 && currentWord.length > 0) {
+        process.stdout.write('\x07');
+      }
+
       return [hits, currentWord];
     }
     

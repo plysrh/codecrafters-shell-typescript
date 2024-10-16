@@ -7,10 +7,18 @@ const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
   completer: (line: string) => {
-    const builtins = ["echo ", "exit "];
-    const hits = builtins.filter(cmd => cmd.startsWith(line));
+    const words = line.split(" ");
+    const currentWord = words[words.length - 1];
+    
+    // Only complete if we're at the beginning and typing a command
+    if (words.length === 1) {
+      const builtins = ["echo ", "exit "];
+      const hits = builtins.filter(cmd => cmd.startsWith(currentWord));
 
-    return [hits, line];
+      return [hits, currentWord];
+    }
+    
+    return [[], line];
   }
 });
 

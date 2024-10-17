@@ -13,11 +13,33 @@ const rl = createInterface({
     // Only complete if we're at the beginning and typing a command
     if (words.length === 1) {
       const builtins = ["echo ", "exit "];
-      const hits = builtins.filter(cmd => cmd.startsWith(currentWord));
+      // Search for executables in PATH
+      const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+      let hits = builtins.filter(cmd => cmd.startsWith(currentWord));
+
+      for (const dir of pathDirs) {
+        try {
+          const files = fs.readdirSync(dir);
+
+          for (const file of files) {
+            if (file.startsWith(currentWord)) {
+              const fullPath = path.join(dir, file);
+
+              try {
+                const stats = fs.statSync(fullPath);
+
+                if (stats.isFile() && (stats.mode & 0o111)) {
+                  hits.push(`${file} `);
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+      }
 
       // Ring bell if no matches found
       if (hits.length === 0 && currentWord.length > 0) {
-        process.stdout.write('\x07');
+        process.stdout.write("\x07");
       }
 
       return [hits, currentWord];
@@ -35,7 +57,7 @@ function parseCommand(input: string): string[] {
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
     
-    if (char === '\\' && i + 1 < input.length) {
+    if (char === "\\" && i + 1 < input.length) {
       const nextChar = input[i + 1];
 
       if (!quoteChar) {

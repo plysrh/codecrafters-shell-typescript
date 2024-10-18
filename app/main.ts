@@ -1,10 +1,11 @@
-import { createInterface } from "readline";
-import * as fs from "fs";
-import * as path from "path";
-import { spawnSync } from "child_process";
+import { createInterface } from "node:readline";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { spawnSync } from "node:child_process";
 
 let lastTabLine = "";
 let tabCount = 0;
+let rl: any;
 
 function getCompletions(line: string): string[] {
   const words = line.split(" ");
@@ -40,13 +41,20 @@ function getCompletions(line: string): string[] {
     } catch {}
   }
   
-  return completions;
+  return [...new Set(completions)];
 }
 
-const rl = createInterface({
+rl = createInterface({
   input: process.stdin,
   output: process.stdout,
   completer: (line: string) => {
+    if (line !== lastTabLine) {
+      tabCount = 1;
+      lastTabLine = line;
+    } else {
+      tabCount++;
+    }
+    
     const completions = getCompletions(line);
     
     if (completions.length === 0) {
@@ -58,20 +66,15 @@ const rl = createInterface({
       return [[completions[0] + " "], line];
     }
     
-    // Multiple completions - handle double tab
-    if (line === lastTabLine) {
-      tabCount++;
-    } else {
-      tabCount = 1;
-      lastTabLine = line;
-    }
+    // Multiple completions
+    process.stdout.write("\x07");
     
     if (tabCount === 1) {
-      process.stdout.write("\x07");
       return [[], line];
     } else {
       const sortedCompletions = completions.sort();
-      process.stdout.write(`\n${sortedCompletions.join("  ")}\n$ ${line}`);
+      process.stdout.write(`\n${sortedCompletions.join("  ")}\n`);
+      setTimeout(() => rl.prompt(true), 0);
       return [[], line];
     }
   }
@@ -123,7 +126,7 @@ function parseCommand(input: string): string[] {
 }
 
 function repl() {
-  rl.question("$ ", answer => {
+  rl.question("$ ", (answer: string) => {
     const parts = parseCommand(answer.trim());
     // Check for output redirection
     let redirectFile = "";

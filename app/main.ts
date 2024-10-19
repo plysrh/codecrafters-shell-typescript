@@ -44,6 +44,22 @@ function getCompletions(line: string): string[] {
   return [...new Set(completions)];
 }
 
+function getLongestCommonPrefix(strings: string[]): string {
+  if (strings.length === 0) return "";
+  if (strings.length === 1) return strings[0];
+  
+  const sorted = strings.sort();
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  
+  let i = 0;
+  while (i < first.length && i < last.length && first[i] === last[i]) {
+    i++;
+  }
+  
+  return first.substring(0, i);
+}
+
 rl = createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -66,7 +82,14 @@ rl = createInterface({
       return [[completions[0] + " "], line];
     }
     
-    // Multiple completions
+    // Multiple completions - check for longest common prefix
+    const lcp = getLongestCommonPrefix(completions);
+    
+    if (lcp.length > line.length) {
+      return [[lcp], line];
+    }
+    
+    // No further completion possible
     process.stdout.write("\x07");
     
     if (tabCount === 1) {

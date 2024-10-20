@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync, spawn } from "node:child_process";
 
 let lastTabLine = "";
 let tabCount = 0;
@@ -151,6 +151,17 @@ function parseCommand(input: string): string[] {
 function repl() {
   rl.question("$ ", (answer: string) => {
     const parts = parseCommand(answer.trim());
+    
+    // Check for pipeline
+    const pipeIndex = parts.indexOf('|');
+    if (pipeIndex !== -1) {
+      const leftCmd = parts.slice(0, pipeIndex);
+      const rightCmd = parts.slice(pipeIndex + 1);
+      
+      executePipeline(leftCmd, rightCmd);
+      return;
+    }
+    
     // Check for output redirection
     let redirectFile = "";
     let appendFile = "";
@@ -315,6 +326,57 @@ function repl() {
       }
     }
 
+    repl();
+  });
+}
+
+function executePipeline(leftCmd: string[], rightCmd: string[]) {
+  const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+  
+  // Find left command
+  let leftPath = "";
+  for (const dir of pathDirs) {
+    const fullPath = path.join(dir, leftCmd[0]);
+    try {
+      const stats = fs.statSync(fullPath);
+      if (stats.isFile() && (stats.mode & 0o111)) {
+        leftPath = fullPath;
+        break;
+      }
+    } catch {}
+  }
+  
+  // Find right command
+  let rightPath = "";
+  for (const dir of pathDirs) {
+    const fullPath = path.join(dir, rightCmd[0]);
+    try {
+      const stats = fs.statSync(fullPath);
+      if (stats.isFile() && (stats.mode & 0o111)) {
+        rightPath = fullPath;
+        break;
+      }
+    } catch {}
+  }
+  
+  if (!leftPath || !rightPath) {
+    console.log("command not found");
+    repl();
+    return;
+  }
+  
+  // Create pipeline
+  const leftProcess = spawn(leftPath, leftCmd.slice(1), { argv0: leftCmd[0] });
+  const rightProcess = spawn(rightPath, rightCmd.slice(1), { 
+    argv0: rightCmd[0],
+    stdio: ['pipe', 'inherit', 'inherit']
+  });
+  
+  // Connect left stdout to right stdin
+  leftProcess.stdout.pipe(rightProcess.stdin);
+  
+  // Wait for both processes to complete
+  rightProcess.on('close', () => {
     repl();
   });
 }

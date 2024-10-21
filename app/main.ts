@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync, spawn } from "node:child_process";
+import { spawnSync, spawn, ChildProcess } from "node:child_process";
 
 let lastTabLine = "";
 let tabCount = 0;
@@ -153,12 +153,24 @@ function repl() {
     const parts = parseCommand(answer.trim());
     
     // Check for pipeline
-    const pipeIndex = parts.indexOf('|');
-    if (pipeIndex !== -1) {
-      const leftCmd = parts.slice(0, pipeIndex);
-      const rightCmd = parts.slice(pipeIndex + 1);
+    const pipeIndices = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === '|') {
+        pipeIndices.push(i);
+      }
+    }
+    
+    if (pipeIndices.length > 0) {
+      const commands = [];
+      let start = 0;
       
-      executePipeline(leftCmd, rightCmd);
+      for (const pipeIndex of pipeIndices) {
+        commands.push(parts.slice(start, pipeIndex));
+        start = pipeIndex + 1;
+      }
+      commands.push(parts.slice(start));
+      
+      executeMultiPipeline(commands);
       return;
     }
     
@@ -361,135 +373,123 @@ function executeBuiltin(cmd: string[], input?: string): string {
   return "";
 }
 
-function executePipeline(leftCmd: string[], rightCmd: string[]) {
+function findCommand(cmd: string): string | null {
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
-  
-  const leftIsBuiltin = isBuiltin(leftCmd[0]);
-  const rightIsBuiltin = isBuiltin(rightCmd[0]);
-  
-  if (leftIsBuiltin && rightIsBuiltin) {
-    // Both builtins
-    const leftOutput = executeBuiltin(leftCmd);
-    const rightOutput = executeBuiltin(rightCmd, leftOutput);
-    process.stdout.write(rightOutput);
-    repl();
-    return;
-  }
-  
-  if (leftIsBuiltin && !rightIsBuiltin) {
-    // Left builtin, right external
-    const leftOutput = executeBuiltin(leftCmd);
-    
-    // Find right command
-    let rightPath = "";
-    for (const dir of pathDirs) {
-      const fullPath = path.join(dir, rightCmd[0]);
-      try {
-        const stats = fs.statSync(fullPath);
-        if (stats.isFile() && (stats.mode & 0o111)) {
-          rightPath = fullPath;
-          break;
-        }
-      } catch {}
-    }
-    
-    if (!rightPath) {
-      console.log("command not found");
-      repl();
-      return;
-    }
-    
-    const rightProcess = spawn(rightPath, rightCmd.slice(1), {
-      argv0: rightCmd[0],
-      stdio: ['pipe', 'inherit', 'inherit']
-    });
-    
-    rightProcess.stdin.write(leftOutput);
-    rightProcess.stdin.end();
-    
-    rightProcess.on('close', () => {
-      repl();
-    });
-    return;
-  }
-  
-  if (!leftIsBuiltin && rightIsBuiltin) {
-    // Left external, right builtin
-    let leftPath = "";
-    for (const dir of pathDirs) {
-      const fullPath = path.join(dir, leftCmd[0]);
-      try {
-        const stats = fs.statSync(fullPath);
-        if (stats.isFile() && (stats.mode & 0o111)) {
-          leftPath = fullPath;
-          break;
-        }
-      } catch {}
-    }
-    
-    if (!leftPath) {
-      console.log("command not found");
-      repl();
-      return;
-    }
-    
-    const leftProcess = spawn(leftPath, leftCmd.slice(1), { argv0: leftCmd[0] });
-    let leftOutput = "";
-    
-    leftProcess.stdout.on('data', (data) => {
-      leftOutput += data.toString();
-    });
-    
-    leftProcess.on('close', () => {
-      const rightOutput = executeBuiltin(rightCmd, leftOutput);
-      process.stdout.write(rightOutput);
-      repl();
-    });
-    return;
-  }
-  
-  // Both external commands
-  let leftPath = "";
   for (const dir of pathDirs) {
-    const fullPath = path.join(dir, leftCmd[0]);
+    const fullPath = path.join(dir, cmd);
     try {
       const stats = fs.statSync(fullPath);
       if (stats.isFile() && (stats.mode & 0o111)) {
-        leftPath = fullPath;
-        break;
+        return fullPath;
       }
     } catch {}
   }
-  
-  let rightPath = "";
-  for (const dir of pathDirs) {
-    const fullPath = path.join(dir, rightCmd[0]);
-    try {
-      const stats = fs.statSync(fullPath);
-      if (stats.isFile() && (stats.mode & 0o111)) {
-        rightPath = fullPath;
-        break;
-      }
-    } catch {}
-  }
-  
-  if (!leftPath || !rightPath) {
-    console.log("command not found");
-    repl();
-    return;
-  }
-  
-  const leftProcess = spawn(leftPath, leftCmd.slice(1), { argv0: leftCmd[0] });
-  const rightProcess = spawn(rightPath, rightCmd.slice(1), { 
-    argv0: rightCmd[0],
-    stdio: ['pipe', 'inherit', 'inherit']
-  });
-  
-  leftProcess.stdout.pipe(rightProcess.stdin);
-  
-  rightProcess.on('close', () => {
-    repl();
-  });
+  return null;
 }
+
+
+
+function executeMultiPipeline(commands: string[][]) {
+  // Check if any command is builtin
+  const hasBuiltin = commands.some(cmd => isBuiltin(cmd[0]));
+  
+  if (hasBuiltin) {
+    // Use recursive approach for builtins
+    executePipelineRecursive(commands, "");
+  } else {
+    // Use concurrent approach for all external commands
+    const processes: ChildProcess[] = [];
+    
+    for (let i = 0; i < commands.length; i++) {
+      const cmd = commands[i];
+      const cmdName = cmd[0];
+      const args = cmd.slice(1);
+      
+      const cmdPath = findCommand(cmdName);
+      if (!cmdPath) {
+        console.log(`${cmdName}: command not found`);
+        repl();
+        return;
+      }
+      
+      let stdio: any;
+      if (i === 0) {
+        stdio = ['inherit', 'pipe', 'inherit'];
+      } else if (i === commands.length - 1) {
+        stdio = ['pipe', 'inherit', 'inherit'];
+      } else {
+        stdio = ['pipe', 'pipe', 'inherit'];
+      }
+      
+      const childProcess = spawn(cmdPath, args, { argv0: cmdName, stdio });
+      processes.push(childProcess);
+    }
+    
+    // Connect pipes
+    for (let i = 0; i < processes.length - 1; i++) {
+      (processes[i].stdout as any)?.pipe(processes[i + 1].stdin);
+    }
+    
+    processes[processes.length - 1].on('close', () => {
+      repl();
+    });
+  }
+}
+
+function executePipelineRecursive(commands: string[][], input: string) {
+  if (commands.length === 0) {
+    if (input) process.stdout.write(input);
+    repl();
+    return;
+  }
+  
+  const [currentCmd, ...remainingCmds] = commands;
+  const cmdName = currentCmd[0];
+  
+  if (isBuiltin(cmdName)) {
+    const output = executeBuiltin(currentCmd, input);
+    executePipelineRecursive(remainingCmds, output);
+  } else {
+    const cmdPath = findCommand(cmdName);
+    if (!cmdPath) {
+      console.log(`${cmdName}: command not found`);
+      repl();
+      return;
+    }
+    
+    let stdio: any;
+    if (remainingCmds.length === 0) {
+      stdio = ['pipe', 'inherit', 'inherit'];
+    } else {
+      stdio = 'pipe';
+    }
+    
+    const childProcess = spawn(cmdPath, currentCmd.slice(1), { argv0: cmdName, stdio });
+    
+    if (input) {
+      (childProcess.stdin as any)?.write(input);
+      (childProcess.stdin as any)?.end();
+    }
+    
+    if (remainingCmds.length === 0) {
+      childProcess.on('close', () => {
+        repl();
+      });
+    } else {
+      let output = "";
+      (childProcess.stdout as any)?.on('data', (data: any) => {
+        output += data.toString();
+      });
+      
+      childProcess.on('close', () => {
+        executePipelineRecursive(remainingCmds, output);
+      });
+    }
+  }
+}
+
+
+
+
 
 repl();

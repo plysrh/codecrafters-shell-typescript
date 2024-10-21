@@ -330,10 +330,125 @@ function repl() {
   });
 }
 
+function isBuiltin(cmd: string): boolean {
+  return ["echo", "exit", "type", "pwd", "cd"].includes(cmd);
+}
+
+function executeBuiltin(cmd: string[], input?: string): string {
+  const command = cmd[0];
+  
+  if (command === "echo") {
+    return cmd.slice(1).join(" ") + "\n";
+  } else if (command === "type") {
+    const targetCommand = cmd[1];
+    if (isBuiltin(targetCommand)) {
+      return `${targetCommand} is a shell builtin\n`;
+    } else {
+      const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+      for (const dir of pathDirs) {
+        const fullPath = path.join(dir, targetCommand);
+        try {
+          const stats = fs.statSync(fullPath);
+          if (stats.isFile() && (stats.mode & 0o111)) {
+            return `${targetCommand} is ${fullPath}\n`;
+          }
+        } catch {}
+      }
+      return `${targetCommand}: not found\n`;
+    }
+  }
+  
+  return "";
+}
+
 function executePipeline(leftCmd: string[], rightCmd: string[]) {
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
   
-  // Find left command
+  const leftIsBuiltin = isBuiltin(leftCmd[0]);
+  const rightIsBuiltin = isBuiltin(rightCmd[0]);
+  
+  if (leftIsBuiltin && rightIsBuiltin) {
+    // Both builtins
+    const leftOutput = executeBuiltin(leftCmd);
+    const rightOutput = executeBuiltin(rightCmd, leftOutput);
+    process.stdout.write(rightOutput);
+    repl();
+    return;
+  }
+  
+  if (leftIsBuiltin && !rightIsBuiltin) {
+    // Left builtin, right external
+    const leftOutput = executeBuiltin(leftCmd);
+    
+    // Find right command
+    let rightPath = "";
+    for (const dir of pathDirs) {
+      const fullPath = path.join(dir, rightCmd[0]);
+      try {
+        const stats = fs.statSync(fullPath);
+        if (stats.isFile() && (stats.mode & 0o111)) {
+          rightPath = fullPath;
+          break;
+        }
+      } catch {}
+    }
+    
+    if (!rightPath) {
+      console.log("command not found");
+      repl();
+      return;
+    }
+    
+    const rightProcess = spawn(rightPath, rightCmd.slice(1), {
+      argv0: rightCmd[0],
+      stdio: ['pipe', 'inherit', 'inherit']
+    });
+    
+    rightProcess.stdin.write(leftOutput);
+    rightProcess.stdin.end();
+    
+    rightProcess.on('close', () => {
+      repl();
+    });
+    return;
+  }
+  
+  if (!leftIsBuiltin && rightIsBuiltin) {
+    // Left external, right builtin
+    let leftPath = "";
+    for (const dir of pathDirs) {
+      const fullPath = path.join(dir, leftCmd[0]);
+      try {
+        const stats = fs.statSync(fullPath);
+        if (stats.isFile() && (stats.mode & 0o111)) {
+          leftPath = fullPath;
+          break;
+        }
+      } catch {}
+    }
+    
+    if (!leftPath) {
+      console.log("command not found");
+      repl();
+      return;
+    }
+    
+    const leftProcess = spawn(leftPath, leftCmd.slice(1), { argv0: leftCmd[0] });
+    let leftOutput = "";
+    
+    leftProcess.stdout.on('data', (data) => {
+      leftOutput += data.toString();
+    });
+    
+    leftProcess.on('close', () => {
+      const rightOutput = executeBuiltin(rightCmd, leftOutput);
+      process.stdout.write(rightOutput);
+      repl();
+    });
+    return;
+  }
+  
+  // Both external commands
   let leftPath = "";
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, leftCmd[0]);
@@ -346,7 +461,6 @@ function executePipeline(leftCmd: string[], rightCmd: string[]) {
     } catch {}
   }
   
-  // Find right command
   let rightPath = "";
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, rightCmd[0]);
@@ -365,17 +479,14 @@ function executePipeline(leftCmd: string[], rightCmd: string[]) {
     return;
   }
   
-  // Create pipeline
   const leftProcess = spawn(leftPath, leftCmd.slice(1), { argv0: leftCmd[0] });
   const rightProcess = spawn(rightPath, rightCmd.slice(1), { 
     argv0: rightCmd[0],
     stdio: ['pipe', 'inherit', 'inherit']
   });
   
-  // Connect left stdout to right stdin
   leftProcess.stdout.pipe(rightProcess.stdin);
   
-  // Wait for both processes to complete
   rightProcess.on('close', () => {
     repl();
   });

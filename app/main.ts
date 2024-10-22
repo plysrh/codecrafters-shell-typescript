@@ -6,6 +6,7 @@ import { spawnSync, spawn, ChildProcess } from "node:child_process";
 let lastTabLine = "";
 let tabCount = 0;
 let rl: any;
+let commandHistory: string[] = [];
 
 function getCompletions(line: string): string[] {
   const words = line.split(" ");
@@ -15,7 +16,7 @@ function getCompletions(line: string): string[] {
   const completions: string[] = [];
   
   // Check builtins
-  const builtins = ["echo", "exit"];
+  const builtins = ["echo", "exit", "history"];
   for (const builtin of builtins) {
     if (builtin.startsWith(currentWord)) {
       completions.push(builtin);
@@ -150,7 +151,11 @@ function parseCommand(input: string): string[] {
 
 function repl() {
   rl.question("$ ", (answer: string) => {
-    const parts = parseCommand(answer.trim());
+    const trimmed = answer.trim();
+    if (trimmed) {
+      commandHistory.push(trimmed);
+    }
+    const parts = parseCommand(trimmed);
     
     // Check for pipeline
     const pipeIndices = [];
@@ -246,10 +251,14 @@ function repl() {
       } catch {
         console.log(`cd: ${parts[1]}: No such file or directory`);
       }
+    } else if (command === "history") {
+      for (let i = 0; i < commandHistory.length; i++) {
+        console.log(`    ${i + 1}  ${commandHistory[i]}`);
+      }
     } else if (command === "type") {
       const targetCommand = parts[1];
 
-      if (["echo", "exit", "type", "pwd", "cd"].includes(targetCommand)) {
+      if (["echo", "exit", "type", "pwd", "cd", "history"].includes(targetCommand)) {
         console.log(`${targetCommand} is a shell builtin`);
       } else {
         const pathDirs = process.env.PATH?.split(path.delimiter) || [];
@@ -343,7 +352,7 @@ function repl() {
 }
 
 function isBuiltin(cmd: string): boolean {
-  return ["echo", "exit", "type", "pwd", "cd"].includes(cmd);
+  return ["echo", "exit", "type", "pwd", "cd", "history"].includes(cmd);
 }
 
 function executeBuiltin(cmd: string[], input?: string): string {
@@ -351,6 +360,12 @@ function executeBuiltin(cmd: string[], input?: string): string {
   
   if (command === "echo") {
     return cmd.slice(1).join(" ") + "\n";
+  } else if (command === "history") {
+    let result = "";
+    for (let i = 0; i < commandHistory.length; i++) {
+      result += `    ${i + 1}  ${commandHistory[i]}\n`;
+    }
+    return result;
   } else if (command === "type") {
     const targetCommand = cmd[1];
     if (isBuiltin(targetCommand)) {

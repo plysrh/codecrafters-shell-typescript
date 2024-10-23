@@ -252,7 +252,9 @@ function repl() {
         console.log(`cd: ${parts[1]}: No such file or directory`);
       }
     } else if (command === "history") {
-      for (let i = 0; i < commandHistory.length; i++) {
+      const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
+      const startIndex = Math.max(0, commandHistory.length - limit);
+      for (let i = startIndex; i < commandHistory.length; i++) {
         console.log(`    ${i + 1}  ${commandHistory[i]}`);
       }
     } else if (command === "type") {
@@ -361,8 +363,10 @@ function executeBuiltin(cmd: string[], input?: string): string {
   if (command === "echo") {
     return cmd.slice(1).join(" ") + "\n";
   } else if (command === "history") {
+    const limit = cmd[1] ? parseInt(cmd[1], 10) : commandHistory.length;
+    const startIndex = Math.max(0, commandHistory.length - limit);
     let result = "";
-    for (let i = 0; i < commandHistory.length; i++) {
+    for (let i = startIndex; i < commandHistory.length; i++) {
       result += `    ${i + 1}  ${commandHistory[i]}\n`;
     }
     return result;

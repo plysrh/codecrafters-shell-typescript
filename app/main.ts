@@ -252,10 +252,20 @@ function repl() {
         console.log(`cd: ${parts[1]}: No such file or directory`);
       }
     } else if (command === "history") {
-      const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
-      const startIndex = Math.max(0, commandHistory.length - limit);
-      for (let i = startIndex; i < commandHistory.length; i++) {
-        console.log(`    ${i + 1}  ${commandHistory[i]}`);
+      if (cmdParts[1] === "-r" && cmdParts[2]) {
+        try {
+          const fileContent = fs.readFileSync(cmdParts[2], 'utf8');
+          const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+          commandHistory.push(...lines);
+        } catch {
+          console.log(`history: ${cmdParts[2]}: No such file or directory`);
+        }
+      } else {
+        const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
+        const startIndex = Math.max(0, commandHistory.length - limit);
+        for (let i = startIndex; i < commandHistory.length; i++) {
+          console.log(`    ${i + 1}  ${commandHistory[i]}`);
+        }
       }
     } else if (command === "type") {
       const targetCommand = parts[1];
@@ -363,13 +373,22 @@ function executeBuiltin(cmd: string[], input?: string): string {
   if (command === "echo") {
     return cmd.slice(1).join(" ") + "\n";
   } else if (command === "history") {
-    const limit = cmd[1] ? parseInt(cmd[1], 10) : commandHistory.length;
-    const startIndex = Math.max(0, commandHistory.length - limit);
-    let result = "";
-    for (let i = startIndex; i < commandHistory.length; i++) {
-      result += `    ${i + 1}  ${commandHistory[i]}\n`;
+    if (cmd[1] === "-r" && cmd[2]) {
+      try {
+        const fileContent = fs.readFileSync(cmd[2], 'utf8');
+        const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+        commandHistory.push(...lines);
+      } catch {}
+      return "";
+    } else {
+      const limit = cmd[1] ? parseInt(cmd[1], 10) : commandHistory.length;
+      const startIndex = Math.max(0, commandHistory.length - limit);
+      let result = "";
+      for (let i = startIndex; i < commandHistory.length; i++) {
+        result += `    ${i + 1}  ${commandHistory[i]}\n`;
+      }
+      return result;
     }
-    return result;
   } else if (command === "type") {
     const targetCommand = cmd[1];
     if (isBuiltin(targetCommand)) {

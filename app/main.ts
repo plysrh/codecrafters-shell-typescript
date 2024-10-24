@@ -260,6 +260,13 @@ function repl() {
         } catch {
           console.log(`history: ${cmdParts[2]}: No such file or directory`);
         }
+      } else if (cmdParts[1] === "-w" && cmdParts[2]) {
+        try {
+          const historyContent = commandHistory.join('\n') + '\n';
+          fs.writeFileSync(cmdParts[2], historyContent);
+        } catch {
+          console.log(`history: ${cmdParts[2]}: Permission denied`);
+        }
       } else {
         const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
         const startIndex = Math.max(0, commandHistory.length - limit);
@@ -378,6 +385,12 @@ function executeBuiltin(cmd: string[], input?: string): string {
         const fileContent = fs.readFileSync(cmd[2], 'utf8');
         const lines = fileContent.split('\n').filter(line => line.trim() !== '');
         commandHistory.push(...lines);
+      } catch {}
+      return "";
+    } else if (cmd[1] === "-w" && cmd[2]) {
+      try {
+        const historyContent = commandHistory.join('\n') + '\n';
+        fs.writeFileSync(cmd[2], historyContent);
       } catch {}
       return "";
     } else {

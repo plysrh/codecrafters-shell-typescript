@@ -7,6 +7,7 @@ let lastTabLine = "";
 let tabCount = 0;
 let rl: any;
 let commandHistory: string[] = [];
+let lastAppendedIndex = 0;
 
 function getCompletions(line: string): string[] {
   const words = line.split(" ");
@@ -267,6 +268,17 @@ function repl() {
         } catch {
           console.log(`history: ${cmdParts[2]}: Permission denied`);
         }
+      } else if (cmdParts[1] === "-a" && cmdParts[2]) {
+        try {
+          const newCommands = commandHistory.slice(lastAppendedIndex);
+          if (newCommands.length > 0) {
+            const appendContent = newCommands.join('\n') + '\n';
+            fs.appendFileSync(cmdParts[2], appendContent);
+            lastAppendedIndex = commandHistory.length;
+          }
+        } catch {
+          console.log(`history: ${cmdParts[2]}: Permission denied`);
+        }
       } else {
         const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
         const startIndex = Math.max(0, commandHistory.length - limit);
@@ -391,6 +403,16 @@ function executeBuiltin(cmd: string[], input?: string): string {
       try {
         const historyContent = commandHistory.join('\n') + '\n';
         fs.writeFileSync(cmd[2], historyContent);
+      } catch {}
+      return "";
+    } else if (cmd[1] === "-a" && cmd[2]) {
+      try {
+        const newCommands = commandHistory.slice(lastAppendedIndex);
+        if (newCommands.length > 0) {
+          const appendContent = newCommands.join('\n') + '\n';
+          fs.appendFileSync(cmd[2], appendContent);
+          lastAppendedIndex = commandHistory.length;
+        }
       } catch {}
       return "";
     } else {

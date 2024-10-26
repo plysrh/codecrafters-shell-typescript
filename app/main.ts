@@ -216,6 +216,14 @@ function repl() {
     if (command === "exit") {
       const exitCode = parts[1] ? parseInt(parts[1], 10) : 0;
 
+      // Save history to HISTFILE before exiting
+      if (process.env.HISTFILE) {
+        try {
+          const historyContent = commandHistory.join('\n') + '\n';
+          fs.writeFileSync(process.env.HISTFILE, historyContent);
+        } catch {}
+      }
+
       process.exit(exitCode);
     } else if (command === "echo") {
       const output = cmdParts.slice(1).join(" ");

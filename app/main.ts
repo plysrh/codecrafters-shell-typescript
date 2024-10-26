@@ -561,8 +561,14 @@ function executePipelineRecursive(commands: string[][], input: string) {
   }
 }
 
-
-
-
+// Load history from HISTFILE on startup
+if (process.env.HISTFILE) {
+  try {
+    const fileContent = fs.readFileSync(process.env.HISTFILE, 'utf8');
+    const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+    commandHistory.push(...lines);
+    lastAppendedIndex = commandHistory.length;
+  } catch {}
+}
 
 repl();

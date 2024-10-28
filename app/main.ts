@@ -11,13 +11,16 @@ let lastAppendedIndex = 0;
 
 function getCompletions(line: string): string[] {
   const words = line.split(" ");
-  if (words.length !== 1) return [];
+
+  if (words.length !== 1) {
+    return [];
+  }
   
   const currentWord = words[0];
   const completions: string[] = [];
-  
   // Check builtins
   const builtins = ["echo", "exit", "history"];
+
   for (const builtin of builtins) {
     if (builtin.startsWith(currentWord)) {
       completions.push(builtin);
@@ -26,14 +29,18 @@ function getCompletions(line: string): string[] {
   
   // Check PATH executables
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+
   for (const dir of pathDirs) {
     try {
       const files = fs.readdirSync(dir);
+
       for (const file of files) {
         if (file.startsWith(currentWord)) {
           const fullPath = path.join(dir, file);
+
           try {
             const stats = fs.statSync(fullPath);
+
             if (stats.isFile() && (stats.mode & 0o111)) {
               completions.push(file);
             }
@@ -47,14 +54,19 @@ function getCompletions(line: string): string[] {
 }
 
 function getLongestCommonPrefix(strings: string[]): string {
-  if (strings.length === 0) return "";
-  if (strings.length === 1) return strings[0];
-  
+  if (strings.length === 0) {
+    return "";
+  }
+
+  if (strings.length === 1) {
+    return strings[0];
+  }
+
   const sorted = strings.sort();
   const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  
+  const last = sorted[sorted.length - 1];  
   let i = 0;
+
   while (i < first.length && i < last.length && first[i] === last[i]) {
     i++;
   }
@@ -77,6 +89,7 @@ rl = createInterface({
     
     if (completions.length === 0) {
       process.stdout.write("\x07");
+
       return [[], line];
     }
     
@@ -98,8 +111,10 @@ rl = createInterface({
       return [[], line];
     } else {
       const sortedCompletions = completions.sort();
+
       process.stdout.write(`\n${sortedCompletions.join("  ")}\n`);
       setTimeout(() => rl.prompt(true), 0);
+
       return [[], line];
     }
   }
@@ -153,15 +168,16 @@ function parseCommand(input: string): string[] {
 function repl() {
   rl.question("$ ", (answer: string) => {
     const trimmed = answer.trim();
+
     if (trimmed) {
       commandHistory.push(trimmed);
     }
     const parts = parseCommand(trimmed);
-    
     // Check for pipeline
     const pipeIndices = [];
+
     for (let i = 0; i < parts.length; i++) {
-      if (parts[i] === '|') {
+      if (parts[i] === "|") {
         pipeIndices.push(i);
       }
     }
@@ -172,11 +188,13 @@ function repl() {
       
       for (const pipeIndex of pipeIndices) {
         commands.push(parts.slice(start, pipeIndex));
+
         start = pipeIndex + 1;
       }
-      commands.push(parts.slice(start));
-      
+
+      commands.push(parts.slice(start));      
       executeMultiPipeline(commands);
+
       return;
     }
     
@@ -220,8 +238,10 @@ function repl() {
       if (process.env.HISTFILE) {
         try {
           const newCommands = commandHistory.slice(lastAppendedIndex);
+
           if (newCommands.length > 0) {
-            const appendContent = newCommands.join('\n') + '\n';
+            const appendContent = `${newCommands.join('\n')}\n`;
+
             fs.appendFileSync(process.env.HISTFILE, appendContent);
           }
         } catch {}
@@ -266,8 +286,9 @@ function repl() {
     } else if (command === "history") {
       if (cmdParts[1] === "-r" && cmdParts[2]) {
         try {
-          const fileContent = fs.readFileSync(cmdParts[2], 'utf8');
+          const fileContent = fs.readFileSync(cmdParts[2], "utf8");
           const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+
           commandHistory.push(...lines);
         } catch {
           console.log(`history: ${cmdParts[2]}: No such file or directory`);
@@ -275,6 +296,7 @@ function repl() {
       } else if (cmdParts[1] === "-w" && cmdParts[2]) {
         try {
           const historyContent = commandHistory.join('\n') + '\n';
+
           fs.writeFileSync(cmdParts[2], historyContent);
         } catch {
           console.log(`history: ${cmdParts[2]}: Permission denied`);
@@ -282,9 +304,12 @@ function repl() {
       } else if (cmdParts[1] === "-a" && cmdParts[2]) {
         try {
           const newCommands = commandHistory.slice(lastAppendedIndex);
+
           if (newCommands.length > 0) {
             const appendContent = newCommands.join('\n') + '\n';
+
             fs.appendFileSync(cmdParts[2], appendContent);
+
             lastAppendedIndex = commandHistory.length;
           }
         } catch {
@@ -293,6 +318,7 @@ function repl() {
       } else {
         const limit = cmdParts[1] ? parseInt(cmdParts[1], 10) : commandHistory.length;
         const startIndex = Math.max(0, commandHistory.length - limit);
+
         for (let i = startIndex; i < commandHistory.length; i++) {
           console.log(`    ${i + 1}  ${commandHistory[i]}`);
         }
@@ -397,22 +423,25 @@ function isBuiltin(cmd: string): boolean {
   return ["echo", "exit", "type", "pwd", "cd", "history"].includes(cmd);
 }
 
-function executeBuiltin(cmd: string[], input?: string): string {
+function executeBuiltin(cmd: string[]): string {
   const command = cmd[0];
   
   if (command === "echo") {
-    return cmd.slice(1).join(" ") + "\n";
+    return `${cmd.slice(1).join(" ")}\n`;
   } else if (command === "history") {
     if (cmd[1] === "-r" && cmd[2]) {
       try {
-        const fileContent = fs.readFileSync(cmd[2], 'utf8');
-        const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+        const fileContent = fs.readFileSync(cmd[2], "utf8");
+        const lines = fileContent.split('\n').filter(line => line.trim() !== "");
+
         commandHistory.push(...lines);
       } catch {}
+
       return "";
     } else if (cmd[1] === "-w" && cmd[2]) {
       try {
-        const historyContent = commandHistory.join('\n') + '\n';
+        const historyContent = `${commandHistory.join('\n')}\n`;
+
         fs.writeFileSync(cmd[2], historyContent);
       } catch {}
       return "";
@@ -421,7 +450,9 @@ function executeBuiltin(cmd: string[], input?: string): string {
         const newCommands = commandHistory.slice(lastAppendedIndex);
         if (newCommands.length > 0) {
           const appendContent = newCommands.join('\n') + '\n';
+
           fs.appendFileSync(cmd[2], appendContent);
+
           lastAppendedIndex = commandHistory.length;
         }
       } catch {}
@@ -430,21 +461,27 @@ function executeBuiltin(cmd: string[], input?: string): string {
       const limit = cmd[1] ? parseInt(cmd[1], 10) : commandHistory.length;
       const startIndex = Math.max(0, commandHistory.length - limit);
       let result = "";
+
       for (let i = startIndex; i < commandHistory.length; i++) {
         result += `    ${i + 1}  ${commandHistory[i]}\n`;
       }
+
       return result;
     }
   } else if (command === "type") {
     const targetCommand = cmd[1];
+
     if (isBuiltin(targetCommand)) {
       return `${targetCommand} is a shell builtin\n`;
     } else {
       const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+
       for (const dir of pathDirs) {
         const fullPath = path.join(dir, targetCommand);
+
         try {
           const stats = fs.statSync(fullPath);
+
           if (stats.isFile() && (stats.mode & 0o111)) {
             return `${targetCommand} is ${fullPath}\n`;
           }
@@ -459,10 +496,13 @@ function executeBuiltin(cmd: string[], input?: string): string {
 
 function findCommand(cmd: string): string | null {
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, cmd);
+
     try {
       const stats = fs.statSync(fullPath);
+
       if (stats.isFile() && (stats.mode & 0o111)) {
         return fullPath;
       }
@@ -487,25 +527,28 @@ function executeMultiPipeline(commands: string[][]) {
     for (let i = 0; i < commands.length; i++) {
       const cmd = commands[i];
       const cmdName = cmd[0];
-      const args = cmd.slice(1);
-      
+      const args = cmd.slice(1);      
       const cmdPath = findCommand(cmdName);
+
       if (!cmdPath) {
         console.log(`${cmdName}: command not found`);
         repl();
+
         return;
       }
       
       let stdio: any;
+
       if (i === 0) {
-        stdio = ['inherit', 'pipe', 'inherit'];
+        stdio = ["inherit", "pipe", "inherit"];
       } else if (i === commands.length - 1) {
-        stdio = ['pipe', 'inherit', 'inherit'];
+        stdio = ["pipe", "inherit", "inherit"];
       } else {
-        stdio = ['pipe', 'pipe', 'inherit'];
+        stdio = ["pipe", "pipe", "inherit"];
       }
       
       const childProcess = spawn(cmdPath, args, { argv0: cmdName, stdio });
+
       processes.push(childProcess);
     }
     
@@ -514,7 +557,7 @@ function executeMultiPipeline(commands: string[][]) {
       (processes[i].stdout as any)?.pipe(processes[i + 1].stdin);
     }
     
-    processes[processes.length - 1].on('close', () => {
+    processes[processes.length - 1].on("close", () => {
       repl();
     });
   }
@@ -522,8 +565,12 @@ function executeMultiPipeline(commands: string[][]) {
 
 function executePipelineRecursive(commands: string[][], input: string) {
   if (commands.length === 0) {
-    if (input) process.stdout.write(input);
+    if (input) {
+      process.stdout.write(input);
+    }
+
     repl();
+
     return;
   }
   
@@ -531,21 +578,25 @@ function executePipelineRecursive(commands: string[][], input: string) {
   const cmdName = currentCmd[0];
   
   if (isBuiltin(cmdName)) {
-    const output = executeBuiltin(currentCmd, input);
+    const output = executeBuiltin(currentCmd);
+
     executePipelineRecursive(remainingCmds, output);
   } else {
     const cmdPath = findCommand(cmdName);
+
     if (!cmdPath) {
       console.log(`${cmdName}: command not found`);
       repl();
+
       return;
     }
     
     let stdio: any;
+
     if (remainingCmds.length === 0) {
-      stdio = ['pipe', 'inherit', 'inherit'];
+      stdio = ["pipe", "inherit", "inherit"];
     } else {
-      stdio = 'pipe';
+      stdio = "pipe";
     }
     
     const childProcess = spawn(cmdPath, currentCmd.slice(1), { argv0: cmdName, stdio });
@@ -556,16 +607,17 @@ function executePipelineRecursive(commands: string[][], input: string) {
     }
     
     if (remainingCmds.length === 0) {
-      childProcess.on('close', () => {
+      childProcess.on("close", () => {
         repl();
       });
     } else {
       let output = "";
-      (childProcess.stdout as any)?.on('data', (data: any) => {
+
+      (childProcess.stdout as any)?.on("data", (data: any) => {
         output += data.toString();
       });
       
-      childProcess.on('close', () => {
+      childProcess.on("close", () => {
         executePipelineRecursive(remainingCmds, output);
       });
     }
@@ -577,6 +629,7 @@ if (process.env.HISTFILE) {
   try {
     const fileContent = fs.readFileSync(process.env.HISTFILE, 'utf8');
     const lines = fileContent.split('\n').filter(line => line.trim() !== '');
+
     commandHistory.push(...lines);
     lastAppendedIndex = commandHistory.length;
   } catch {}

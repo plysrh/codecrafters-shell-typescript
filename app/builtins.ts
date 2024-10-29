@@ -1,14 +1,25 @@
 /**
  * Builtin Commands Module
  * 
- * This module handles shell builtin commands and external command resolution.
- * Builtin commands are executed directly within the shell process, while
- * external commands are found in the system PATH.
+ * Reactive implementations of shell builtin commands and PATH resolution.
+ * 
+ * Builtin commands:
+ * - echo: Output text with stream-based redirection
+ * - type: Command identification with async PATH search
+ * - history: Delegated to history module
+ * 
+ * External commands:
+ * - findCommand: Synchronous PATH search for immediate results
+ * - findCommand$: Asynchronous PATH search with observables
+ * 
+ * All functions return observables for consistent reactive patterns.
  */
 
-import fs from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
-import { executeHistoryCommand } from "./history";
+import { Observable, of, from } from "rxjs";
+import { map, switchMap, catchError, mergeMap, filter } from "rxjs/operators";
+import { executeHistoryCommand$ } from "./history";
 
 /**
  * Checks if a command is a shell builtin.
@@ -21,72 +32,86 @@ export function isBuiltin(cmd: string): boolean {
 }
 
 /**
- * Executes a builtin command and returns the result.
- * 
- * @param cmd - Array containing the command and its arguments
- * @param commandHistory - Array of previously executed commands
- * @param lastAppendedIndex - Index tracking last appended history entry
- * @returns Object containing the command output and updated append index
- */
-export function executeBuiltin(cmd: string[], commandHistory: string[], lastAppendedIndex: number): { result: string, newLastAppendedIndex: number } {
-  const command = cmd[0];
-  
-  if (command === "echo") {
-    // Echo command: outputs its arguments separated by spaces
-    return { result: `${cmd.slice(1).join(" ")}\n`, newLastAppendedIndex: lastAppendedIndex };
-  } else if (command === "history") {
-    // History command: delegates to history module for processing
-    return executeHistoryCommand(cmd.slice(1), commandHistory, lastAppendedIndex);
-  } else if (command === "type") {
-    // Type command: identifies whether a command is builtin or external
-    const targetCommand = cmd[1];
-
-    if (isBuiltin(targetCommand)) {
-      return { result: `${targetCommand} is a shell builtin\n`, newLastAppendedIndex: lastAppendedIndex };
-    } else {
-      // Search for external command in PATH directories
-      const pathDirs = process.env.PATH?.split(path.delimiter) || [];
-
-      for (const dir of pathDirs) {
-        const fullPath = path.join(dir, targetCommand);
-
-        try {
-          const stats = fs.statSync(fullPath);
-
-          // Check if file exists and is executable (has execute permission)
-          if (stats.isFile() && (stats.mode & 0o111)) {
-            return { result: `${targetCommand} is ${fullPath}\n`, newLastAppendedIndex: lastAppendedIndex };
-          }
-        } catch {}
-      }
-
-      return { result: `${targetCommand}: not found\n`, newLastAppendedIndex: lastAppendedIndex };
-    }
-  }
-  
-  return { result: "", newLastAppendedIndex: lastAppendedIndex };
-}
-
-/**
- * Finds an external command in the system PATH.
+ * Finds an external command in the system PATH asynchronously.
  * 
  * @param cmd - The command name to search for
- * @returns Full path to the command if found, null otherwise
+ * @returns Observable of full path to the command if found, null otherwise
  */
 export function findCommand(cmd: string): string | null {
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
 
-  // Search through each directory in PATH
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, cmd);
 
     try {
-      const stats = fs.statSync(fullPath);
-      // Return path if file exists and is executable
+      const stats = require('fs').statSync(fullPath);
+
       if (stats.isFile() && (stats.mode & 0o111)) {
         return fullPath;
       }
     } catch {}
   }
   return null;
+}
+
+export function findCommand$(cmd: string): Observable<string | null> {
+  const pathDirs = process.env.PATH?.split(path.delimiter) || [];
+
+  return from(pathDirs).pipe(
+    mergeMap(dir => {
+      const fullPath = path.join(dir, cmd);
+
+      return from(fs.stat(fullPath)).pipe(
+        map(stats => {
+          if (stats.isFile() && (stats.mode & 0o111)) {
+            return fullPath;
+          }
+
+          return null;
+        }),
+        catchError(() => of(null))
+      );
+    }),
+    filter(result => result !== null),
+    map(result => result as string)
+  ).pipe(
+    switchMap(result => of(result)),
+    catchError(() => of(null))
+  );
+}
+
+/**
+ * Executes a builtin command asynchronously and returns the result.
+ * 
+ * @param cmd - Array containing the command and its arguments
+ * @param commandHistory - Array of previously executed commands
+ * @param lastAppendedIndex - Index tracking last appended history entry
+ * @returns Observable containing the command output and updated append index
+ */
+export function executeBuiltin$(cmd: string[], commandHistory: string[], lastAppendedIndex: number): Observable<{ result: string, newLastAppendedIndex: number }> {
+  const command = cmd[0];
+  
+  if (command === "echo") {
+    return of({ result: `${cmd.slice(1).join(" ")}\n`, newLastAppendedIndex: lastAppendedIndex });
+  } else if (command === "history") {
+    return executeHistoryCommand$(cmd.slice(1), commandHistory, lastAppendedIndex);
+  } else if (command === "type") {
+    const targetCommand = cmd[1];
+
+    if (isBuiltin(targetCommand)) {
+      return of({ result: `${targetCommand} is a shell builtin\n`, newLastAppendedIndex: lastAppendedIndex });
+    } else {
+      return findCommand$(targetCommand).pipe(
+        map(fullPath => {
+          if (fullPath) {
+            return { result: `${targetCommand} is ${fullPath}\n`, newLastAppendedIndex: lastAppendedIndex };
+          } else {
+            return { result: `${targetCommand}: not found\n`, newLastAppendedIndex: lastAppendedIndex };
+          }
+        })
+      );
+    }
+  }
+  
+  return of({ result: "", newLastAppendedIndex: lastAppendedIndex });
 }

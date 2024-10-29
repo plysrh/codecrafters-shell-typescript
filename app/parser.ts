@@ -50,6 +50,7 @@ export function parseCommand(input: string): string[] {
       // Space outside quotes: word boundary
       if (current) {
         parts.push(current);
+
         current = "";
       }
     } else {

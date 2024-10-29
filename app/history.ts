@@ -1,93 +1,112 @@
 /**
- * History Management Module
+ * Reactive History Management Module
  * 
- * This module handles command history operations including loading from files,
- * saving to files, and executing history-related commands with various flags.
+ * Asynchronous command history operations using RxJS streams.
+ * 
+ * Features:
+ * - Non-blocking file I/O with fs.promises
+ * - Observable-based history commands
+ * - HISTFILE integration for persistence
+ * - Stream-based error handling
+ * 
+ * Commands supported:
+ * - history: Display command history
+ * - history N: Show last N commands
+ * - history -r file: Read history from file
+ * - history -w file: Write history to file
+ * - history -a file: Append new commands to file
  */
 
-import fs from "node:fs";
+import { promises as fs } from "node:fs";
+import { Observable, of, from } from "rxjs";
+import { map, catchError } from "rxjs/operators";
 
 /**
- * Loads command history from a file into memory.
+ * Loads command history from a file into memory asynchronously.
  * 
  * @param histfile - Path to the history file to load
  * @param commandHistory - Array to populate with loaded commands
- * @returns Number of commands loaded (used as lastAppendedIndex)
+ * @returns Observable of number of commands loaded (used as lastAppendedIndex)
  */
-export function loadHistoryFromFile(histfile: string, commandHistory: string[]): number {
-  try {
-    const fileContent = fs.readFileSync(histfile, "utf8");
-    const lines = fileContent.split("\n").filter(line => line.trim() !== "");
+export function loadHistoryFromFile$(histfile: string, commandHistory: string[]): Observable<number> {
+  return from(fs.readFile(histfile, "utf8")).pipe(
+    map(fileContent => {
+      const lines = fileContent.split("\n").filter(line => line.trim() !== "");
 
-    commandHistory.push(...lines);
+      commandHistory.push(...lines);
 
-    return commandHistory.length;
-  } catch {
-    return 0;
-  }
+      return commandHistory.length;
+    }),
+    catchError(() => of(0))
+  );
 }
 
 /**
- * Saves new command history entries to a file by appending them.
+ * Saves new command history entries to a file by appending them asynchronously.
  * Only saves commands that haven't been previously saved.
  * 
  * @param histfile - Path to the history file to append to
  * @param commandHistory - Array containing all commands
  * @param lastAppendedIndex - Index of last previously saved command
  */
-export function saveHistoryToFile(histfile: string, commandHistory: string[], lastAppendedIndex: number): void {
-  try {
-    const newCommands = commandHistory.slice(lastAppendedIndex);
+export function saveHistoryToFile$(histfile: string, commandHistory: string[], lastAppendedIndex: number): Observable<void> {
+  const newCommands = commandHistory.slice(lastAppendedIndex);
 
-    if (newCommands.length > 0) {
-      const appendContent = `${newCommands.join('\n')}\n`;
+  if (newCommands.length === 0) {
+    return of(void 0);
+  }
 
-      fs.appendFileSync(histfile, appendContent);
-    }
-  } catch {}
+  const appendContent = `${newCommands.join('\n')}\n`;
+
+  return from(fs.appendFile(histfile, appendContent)).pipe(
+    catchError(() => of(void 0))
+  );
 }
 
 /**
- * Executes history command with various flags and arguments.
+ * Executes history command with various flags and arguments asynchronously.
  * Supports: history, history N, history -r file, history -w file, history -a file
  * 
  * @param args - Command arguments (excluding 'history' itself)
  * @param commandHistory - Array containing all commands
  * @param lastAppendedIndex - Index tracking last appended entry
- * @returns Object with command output and updated append index
+ * @returns Observable with command output and updated append index
  */
-export function executeHistoryCommand(args: string[], commandHistory: string[], lastAppendedIndex: number): { result: string, newLastAppendedIndex: number } {
+export function executeHistoryCommand$(args: string[], commandHistory: string[], lastAppendedIndex: number): Observable<{ result: string, newLastAppendedIndex: number }> {
   if (args[0] === "-r" && args[1]) {
     // Read history from file and append to current history
-    try {
-      const fileContent = fs.readFileSync(args[1], "utf8");
-      const lines = fileContent.split("\n").filter(line => line.trim() !== "");
+    return from(fs.readFile(args[1], "utf8")).pipe(
+      map(fileContent => {
+        const lines = fileContent.split("\n").filter(line => line.trim() !== "");
 
-      commandHistory.push(...lines);
-    } catch {}
-    return { result: "", newLastAppendedIndex: lastAppendedIndex };
+        commandHistory.push(...lines);
+
+        return { result: "", newLastAppendedIndex: lastAppendedIndex };
+      }),
+      catchError(() => of({ result: "", newLastAppendedIndex: lastAppendedIndex }))
+    );
   } else if (args[0] === "-w" && args[1]) {
     // Write entire history to file (overwrite)
-    try {
-      const historyContent = `${commandHistory.join('\n')}\n`;
+    const historyContent = `${commandHistory.join('\n')}\n`;
 
-      fs.writeFileSync(args[1], historyContent);
-    } catch {}
-    return { result: "", newLastAppendedIndex: lastAppendedIndex };
+    return from(fs.writeFile(args[1], historyContent)).pipe(
+      map(() => ({ result: "", newLastAppendedIndex: lastAppendedIndex })),
+      catchError(() => of({ result: "", newLastAppendedIndex: lastAppendedIndex }))
+    );
   } else if (args[0] === "-a" && args[1]) {
     // Append new history entries to file
-    try {
-      const newCommands = commandHistory.slice(lastAppendedIndex);
+    const newCommands = commandHistory.slice(lastAppendedIndex);
+    
+    if (newCommands.length === 0) {
+      return of({ result: "", newLastAppendedIndex: lastAppendedIndex });
+    }
+    
+    const appendContent = `${newCommands.join('\n')}\n`;
 
-      if (newCommands.length > 0) {
-        const appendContent = `${newCommands.join('\n')}\n`;
-
-        fs.appendFileSync(args[1], appendContent);
-
-        return { result: "", newLastAppendedIndex: commandHistory.length };
-      }
-    } catch {}
-    return { result: "", newLastAppendedIndex: lastAppendedIndex };
+    return from(fs.appendFile(args[1], appendContent)).pipe(
+      map(() => ({ result: "", newLastAppendedIndex: commandHistory.length })),
+      catchError(() => of({ result: "", newLastAppendedIndex: lastAppendedIndex }))
+    );
   } else {
     // Display history (optionally limited to last N entries)
     const limit = args[0] ? parseInt(args[0], 10) : commandHistory.length;
@@ -98,6 +117,6 @@ export function executeHistoryCommand(args: string[], commandHistory: string[], 
       result += `    ${i + 1}  ${commandHistory[i]}\n`;
     }
 
-    return { result, newLastAppendedIndex: lastAppendedIndex };
+    return of({ result, newLastAppendedIndex: lastAppendedIndex });
   }
 }

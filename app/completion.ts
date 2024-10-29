@@ -1,23 +1,80 @@
 /**
  * Tab Completion Module
  * 
- * This module provides tab completion functionality for the shell.
- * It supports completion of builtin commands and executable files in PATH.
- */
-
-import fs from "node:fs";
-import path from "node:path";
-
-/**
- * Gets available completions for the current input line.
- * Only provides completions for single-word commands (no arguments).
+ * Provides intelligent command completion for the shell.
  * 
- * @param line - The current input line to complete
- * @returns Array of possible completions
+ * Features:
+ * - Builtin command completion
+ * - Executable file completion from PATH
+ * - Longest common prefix calculation
+ * - Multiple completion display
+ * - Bell notification for no matches
+ * 
+ * Completion behavior:
+ * - Single match: Auto-complete with space
+ * - Multiple matches: Show common prefix or list all
+ * - No matches: Bell sound
+ * - Double-tab: Display all available completions
  */
-export function getCompletions(line: string): string[] {
-  const words = line.split(" ");
 
+import path from "node:path";
+import fs from "node:fs";
+
+// Tab completion state
+let lastTabLine = "";
+let tabCount = 0;
+
+export function setupCompletion() {
+  return (line: string) => {
+    if (line !== lastTabLine) {
+      tabCount = 1;
+      lastTabLine = line;
+    } else {
+      tabCount++;
+    }
+    
+    const completions = getCompletions(line);
+    
+    if (completions.length === 0) {
+      process.stdout.write("\x07");
+
+      return [[], line];
+    }
+    
+    if (completions.length === 1) {
+      return [[completions[0] + " "], line];
+    }
+    
+    // Multiple completions - check for longest common prefix
+    const lcp = getLongestCommonPrefix(completions);
+    
+    if (lcp.length > line.length) {
+      return [[lcp], line];
+    }
+    
+    // No further completion possible
+    process.stdout.write("\x07");
+    
+    if (tabCount === 1) {
+      return [[], line];
+    } else {
+      const sortedCompletions = completions.sort();
+
+      process.stdout.write(`\n${sortedCompletions.join("  ")}\n`);
+      setTimeout(() => {
+        const rl = require('readline');
+        // Re-display prompt and current line
+        process.stdout.write(`$ ${line}`);
+      }, 0);
+
+      return [[], line];
+    }
+  };
+}
+
+function getCompletions(line: string): string[] {
+  const words = line.split(" ");
+  
   // Only complete if there's exactly one word (the command)
   if (words.length !== 1) {
     return [];
@@ -25,9 +82,10 @@ export function getCompletions(line: string): string[] {
   
   const currentWord = words[0];
   const completions: string[] = [];
+  
   // Check builtin commands for matches
   const builtins = ["echo", "exit", "history"];
-
+  
   for (const builtin of builtins) {
     if (builtin.startsWith(currentWord)) {
       completions.push(builtin);
@@ -36,18 +94,18 @@ export function getCompletions(line: string): string[] {
   
   // Check executable files in PATH directories
   const pathDirs = process.env.PATH?.split(path.delimiter) || [];
-
+  
   for (const dir of pathDirs) {
     try {
       const files = fs.readdirSync(dir);
-
+      
       for (const file of files) {
         if (file.startsWith(currentWord)) {
           const fullPath = path.join(dir, file);
-
+          
           try {
             const stats = fs.statSync(fullPath);
-
+            
             // Only include executable files
             if (stats.isFile() && (stats.mode & 0o111)) {
               completions.push(file);
@@ -62,14 +120,7 @@ export function getCompletions(line: string): string[] {
   return [...new Set(completions)];
 }
 
-/**
- * Calculates the longest common prefix among a set of strings.
- * Used for partial completion when multiple matches exist.
- * 
- * @param strings - Array of strings to find common prefix for
- * @returns The longest common prefix, or empty string if none
- */
-export function getLongestCommonPrefix(strings: string[]): string {
+function getLongestCommonPrefix(strings: string[]): string {
   if (strings.length === 0) {
     return "";
   }

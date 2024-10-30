@@ -62,7 +62,6 @@ export function setupCompletion() {
 
       process.stdout.write(`\n${sortedCompletions.join("  ")}\n`);
       setTimeout(() => {
-        const rl = require('readline');
         // Re-display prompt and current line
         process.stdout.write(`$ ${line}`);
       }, 0);

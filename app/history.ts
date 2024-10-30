@@ -56,7 +56,7 @@ export function saveHistoryToFile$(histfile: string, commandHistory: string[], l
     return of(void 0);
   }
 
-  const appendContent = `${newCommands.join('\n')}\n`;
+  const appendContent = `${newCommands.join("\n")}\n`;
 
   return from(fs.appendFile(histfile, appendContent)).pipe(
     catchError(() => of(void 0))

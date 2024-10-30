@@ -44,7 +44,7 @@ export function findCommand(cmd: string): string | null {
     const fullPath = path.join(dir, cmd);
 
     try {
-      const stats = require('fs').statSync(fullPath);
+      const stats = require("fs").statSync(fullPath);
 
       if (stats.isFile() && (stats.mode & 0o111)) {
         return fullPath;

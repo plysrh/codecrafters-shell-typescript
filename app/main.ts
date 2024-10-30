@@ -33,7 +33,7 @@ const rl = createInterface({
 });
 
 // Input stream from readline
-const input$ = fromEvent(rl, 'line').pipe(
+const input$ = fromEvent(rl, "line").pipe(
   map((line: unknown) => (line as string).trim()),
   filter(line => line.length > 0),
   tap(line => commandHistory.push(line)),
@@ -42,7 +42,7 @@ const input$ = fromEvent(rl, 'line').pipe(
 
 // Exit command stream
 const exit$ = input$.pipe(
-  filter(line => line.startsWith('exit')),
+  filter(line => line.startsWith("exit")),
   map(line => parseCommand(line)[1] ? parseInt(parseCommand(line)[1], 10) : 0),
   tap(exitCode => {
     if (process.env.HISTFILE) {
@@ -57,7 +57,7 @@ const exit$ = input$.pipe(
 
 // Regular command stream
 const command$ = input$.pipe(
-  filter(line => !line.startsWith('exit')),
+  filter(line => !line.startsWith("exit")),
   map(line => parseCommand(line)),
   switchMap(parts => executeCommand$(parts, commandHistory, lastAppendedIndex)),
   tap(result => {
@@ -94,7 +94,7 @@ function startShell() {
   command$.subscribe();
   
   // Set prompt
-  rl.setPrompt('$ ');
+  rl.setPrompt("$ ");
   rl.prompt();
 }
 

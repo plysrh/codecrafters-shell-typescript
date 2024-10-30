@@ -148,7 +148,7 @@ function executeTypeCommand$(targetCommand: string): Observable<void> {
   for (const dir of pathDirs) {
     const fullPath = path.join(dir, targetCommand);
     try {
-      const stats = require('fs').statSync(fullPath);
+      const stats = require("fs").statSync(fullPath);
       if (stats.isFile() && (stats.mode & 0o111)) {
         console.log(`${targetCommand} is ${fullPath}`);
         return of(void 0);
